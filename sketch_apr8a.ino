@@ -4,6 +4,7 @@
 #include <PubSubClient.h>
 //#include <DHT.h>
 #include "esp_sleep.h"
+#include <LoRa.h>
 
 // กำหนดค่า Wi-Fi
 const char* ssid = "iPhonePok";
@@ -18,9 +19,13 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 // กำหนดค่าเวลา
-#define SOIL_SENSOR_PIN 33
-#define PUMP_PIN 26
+#define SOIL_SENSOR_PIN 34
+#define PUMP_PIN 16
 #define pH_SENSOR 27
+
+#define SS 9
+#define RST 14
+#define DIO0 26
 
 #define WAKE_PIN GPIO_NUM_4
 
@@ -31,6 +36,9 @@ int soilValue = 0;
 float pHValue= 0;
 float temp = 0;
 const int dryThreshold = 3500;
+
+String command[] = {"NODE1:PUMP=ON", "NODE2:PUMP=ON"};
+int numCommands = sizeof(command) / sizeof(command[0]);
 
 void reconnect() {
   while (!client.connected()) {
@@ -73,6 +81,13 @@ void setup() {
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("Connected to WiFi");
+
+  LoRa.setPins(SS, RST, DIO0);
+  if (!LoRa.begin(433E6)) {
+    Serial.println("LoRa failed!");
+    while (1);
+  }
+  Serial.println("LoRa ready");
 
   // เริ่มต้น NTPClient
   timeClient.begin();
@@ -138,6 +153,18 @@ void setup() {
       delay(5000);  // เปิดปั๊ม 1 ชั่วโมง
       digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊ม
       Serial.println("Pump OFF");
+    }
+  }
+
+  if(PUMP_PIN == HIGH){
+    for (int i = 0; i < numCommands; i++) {
+      LoRa.beginPacket();
+      LoRa.print(command[i]);
+      LoRa.endPacket();
+      delay(1000);
+
+      Serial.println("Sent: " + command);
+      delay(10000); // ส่งทุก 10 วินาที
     }
   }
 

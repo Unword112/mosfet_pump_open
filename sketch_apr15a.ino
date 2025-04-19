@@ -38,7 +38,7 @@ void setup() {
       }
       Serial.println("Received: " + msg);
 
-      if (msg == "NODE1:PUMP=ON") {
+      if (msg == "ON") {
         digitalWrite(RELAY_PIN, HIGH);
       } else if (msg == "NODE1:PUMP=OFF") {
         digitalWrite(RELAY_PIN, LOW);

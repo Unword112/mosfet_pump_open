@@ -35,8 +35,7 @@ void setup() {
 
       if (msg == "ON") {
         digitalWrite(RELAY_PIN, HIGH);
-      } else if (msg == "NODE1:PUMP=OFF") {
-        digitalWrite(RELAY_PIN, LOW);
+        delay(5000);
       }
     } else {
       Serial.println("No LoRa packet received.");

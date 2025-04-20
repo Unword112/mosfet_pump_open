@@ -27,11 +27,7 @@ PubSubClient client(espClient);
 #define DHTTYPE DHT22
 DHT dht(dH_SENSOR, DHTTYPE);
 
-#define SS 9
-#define RST 14
-#define DIO0 26
-
-int alreadySendLoRa = 0;
+bool alreadySendLoRa = false;
 
 #define WAKE_PIN GPIO_NUM_4
 
@@ -44,6 +40,15 @@ float temp = 0;
 const int dryThreshold = 3500;
 
 String command = "ON";
+
+void sendCommand() {
+  LoRa.beginPacket();
+  LoRa.print(command);
+  LoRa.endPacket();
+  Serial.print("Sent command: ");
+  alreadySendLoRa = true;
+  Serial.println(command);
+}
 
 void reconnect() {
   while (!client.connected()) {
@@ -87,8 +92,12 @@ void setup() {
   }
   Serial.println("Connected to WiFi");
 
-  LoRa.setPins(SS, RST, DIO0);
-  Serial.println("LoRa ready");
+  LoRa.setPins(5, 22, 25); // NSS, RESET, DIO0
+  if (!LoRa.begin(433E6)) { // 433 MHz (ปรับตามโมดูลของคุณ)
+    Serial.println("LoRa init failed!");
+    while (1);
+  }
+  Serial.println("LoRa initialized.");
 
   // เริ่มต้น NTPClient
   timeClient.begin();
@@ -132,10 +141,12 @@ void setup() {
   
   if (soilValue > dryThreshold) {
     digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
+    sendCommand();
     Serial.println("Pump ON (IMMEDIATELY SOIL DRY > 3500)");
     delay(5000);  // เปิดปั๊ม 1 ชั่วโมง
     digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊ม
     Serial.println("Pump OFF");
+    alreadySendLoRa = false;
 
     delay(5000);
   } else {
@@ -157,17 +168,6 @@ void setup() {
       digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊ม
       Serial.println("Pump OFF");
     }
-  }
-
-  if(digitalRead(PUMP_PIN) == HIGH && alreadySendLoRa == 0){
-    LoRa.beginPacket();
-    LoRa.print(command);
-    LoRa.endPacket();
-    delay(1000);
-
-    Serial.println("Sent: " + command);
-    alreadySendLoRa = 1;
-    delay(10000); // ส่งทุก 10 วินาที
   }
 
   int soil_percent = map(soilValue, 0, 4095, 100, 1);

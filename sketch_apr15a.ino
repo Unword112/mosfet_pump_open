@@ -1,10 +1,9 @@
 #include <LoRa.h>
 
-#define SS 9
-#define RST 14
-#define DIO0 4         // DIO0 ไปที่ GPIO4 เพื่อ Wakeup
-#define RELAY_PIN 16
-
+#define SS 5
+#define RST 22
+#define DIO0 4
+#define RELAY_PIN 32
 #define WAKE_PIN GPIO_NUM_4
 
 void setup() {
@@ -20,12 +19,19 @@ void setup() {
     default : Serial.println("Other"); break;
   }
 
-  // เริ่ม LoRa ก่อน parse
   LoRa.setPins(SS, RST, DIO0);
-  LoRa.begin(433E6);
+  if (!LoRa.begin(433E6)) {
+    Serial.println("LoRa init failed.");
+    while (true);
+  }
+  LoRa.receive();
 
   if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
+    Serial.println("Checking for LoRa packet...");
     int packetSize = LoRa.parsePacket();
+    Serial.print("Packet size: ");
+    Serial.println(packetSize);
+
     if (packetSize) {
       String msg = "";
       while (LoRa.available()) {
@@ -36,13 +42,14 @@ void setup() {
       if (msg == "ON") {
         digitalWrite(RELAY_PIN, HIGH);
         delay(5000);
+        digitalWrite(RELAY_PIN, LOW);
+        Serial.println("Relay activated.");
       }
     } else {
       Serial.println("No LoRa packet received.");
     }
   }
 
-  // ตั้ง wakeup จาก DIO0
   esp_sleep_enable_ext0_wakeup(WAKE_PIN, 0);
 
   Serial.println("Going to sleep...");

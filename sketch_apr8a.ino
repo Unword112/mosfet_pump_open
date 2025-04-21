@@ -44,10 +44,16 @@ String command = "ON";
 void sendCommand() {
   LoRa.beginPacket();
   LoRa.print(command);
-  LoRa.endPacket();
-  Serial.print("Sent command: ");
-  alreadySendLoRa = true;
-  Serial.println(command);
+  int result = LoRa.endPacket(); // ตรวจสอบผลลัพธ์การส่ง
+  
+  if (result == 0) {
+    Serial.println("Failed to send command.");
+    alreadySendLoRa = false;
+  } else {
+    Serial.print("Sent command: ");
+    Serial.println(command);
+    alreadySendLoRa = true;
+  }
 }
 
 void reconnect() {

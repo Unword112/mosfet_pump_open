@@ -199,11 +199,13 @@ void setup() {
   // เช็คว่าเวลาตรงกับ 8:00 AM หรือ 5:00 PM
   if (currentTime.startsWith("08") || currentTime.startsWith("17"))  {
     if(minute >= 0 && minute <= 30){ // เช็คเวลาหลักนาที 8:00 - 8:30 || 17:00 - 17:30
-      digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
-      Serial.println("Pump ON at the scheduled time");
-      delay(5000);  // เปิดปั๊ม 1 ชั่วโมง
-      digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊ม
-      Serial.println("Pump OFF");
+      if (soilValue > dryThreshold){
+        digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
+        Serial.println("Pump ON at the scheduled time");
+        delay(5000);  // เปิดปั๊ม 1 ชั่วโมง
+        digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊ม
+        Serial.println("Pump OFF");
+      }
     }
   }
 

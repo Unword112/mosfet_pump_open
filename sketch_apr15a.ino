@@ -5,7 +5,7 @@
 #define DIO0 26
 #define PUMP_PIN 32
 #define WAKE_PIN GPIO_NUM_4
-#define SOIL_SENSOR_PIN 25
+#define SOIL_SENSOR_PIN 34
 
 int soilValue = 0;
 const int dryThreshold = 3500;
@@ -36,19 +36,18 @@ void setup() {
     while (true);
   }
 
-  //LoRa.receive();
   Serial.println("Waiting for LoRa packet...");
 
   int packetSize = LoRa.parsePacket();
   if (packetSize) {
     String msg = "";
     while (LoRa.available()) {
-      msg += (char)LoRa.read();
+      msg += (char)LoRa.read();  // อ่านข้อความทั้งหมด
     }
+    int command = msg.toInt();
+    Serial.println("Received: " + String(command));
 
-    Serial.println("Received: " + msg);
-
-    if (msg == "ON") {
+    if (command == 1) {
         if (soilValue > dryThreshold) {
           digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
           Serial.println("Pump ON FOLLOW OPEN BY MASTER");
@@ -71,23 +70,27 @@ void setup() {
 
           delay(2000);
         } else {
-          digitalWrite(PUMP_PIN, LOW);
+            digitalWrite(PUMP_PIN, LOW);
+            Serial.println("Soil is not dry, deny ON command.");
+          }
+        } else if (command == 0) {
+            digitalWrite(PUMP_PIN, LOW);
+            Serial.println("Pump OFF by Master.");
         }
     }
+      Serial.println("Wake up...");
 
-  // ตั้งเวลาให้ ESP32 ตื่นทุกๆ 1 ชั่วโมง (3600 วินาที)
-  Serial.println("Wake up...");
-  //esp_sleep_enable_timer_wakeup(3600 * 1000000);
-  esp_sleep_enable_timer_wakeup(36 * 1000000);
-  
-  Serial.flush(); 
+  // ตั้งเวลาให้ ESP32 ตื่น (3600 วินาที คือ 1 ชั่วโมง)
+  //esp_sleep_enable_timer_wakeup(3600 * 1000000)
+  esp_sleep_enable_timer_wakeup(36 * 1000000);  
+
   Serial.println("Entering Deep Sleep...");
-
-  delay(10000);
-  // เข้าสู่โหมด deep sleep
-  esp_deep_sleep_start();
-  }
+  LoRa.receive();  // ตั้งให้ LoRa เข้าสู่โหมดรับ ก่อนเข้าสู่ deep sleep
+  Serial.flush();  // รอให้ Serial พิมพ์ข้อความทั้งหมดก่อน
+  delay(10000);    // หน่วงเวลาเล็กน้อยเพื่อความชัวร์
+  esp_deep_sleep_start();  // เข้าสู่ deep sleep
 }
+
 
 void loop() {
   // ไม่ใช้

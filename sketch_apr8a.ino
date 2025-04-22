@@ -39,11 +39,20 @@ int pHValue= 0;
 float temp = 0;
 const int dryThreshold = 3500;
 
-String command = "ON";
+String commandON = "ON";
+String commandOFF = "OFF";
 
 void sendCommand() {
+  String commandToSend;
+
+  if (digitalRead(PUMP_PIN) == HIGH) {
+    commandToSend = commandON;
+  } else {
+    commandToSend = commandOFF;
+  }
+
   LoRa.beginPacket();
-  LoRa.print(command);
+  LoRa.print(commandToSend);
   int result = LoRa.endPacket(); // ตรวจสอบผลลัพธ์การส่ง
   
   if (result == 0) {
@@ -51,11 +60,10 @@ void sendCommand() {
     alreadySendLoRa = false;
   } else {
     Serial.print("Sent command: ");
-    Serial.println(command);
+    Serial.println(commandToSend);
     alreadySendLoRa = true;
   }
 }
-
 void reconnect() {
   while (!client.connected()) {
     if (client.connect(ID, token, "")) {
@@ -72,6 +80,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
     message += (char)payload[i];
   }
   Serial.println("Received: " + message);
+
+   if (message.indexOf("setPump") != -1) {
+    if (message.indexOf("true") != -1) {
+      digitalWrite(PUMP_PIN, LOW);
+      Serial.println("Pump FORCE STOP");
+    }
+  }
 
 }
 
@@ -130,12 +145,6 @@ void setup() {
   esp_sleep_enable_ext0_wakeup(WAKE_PIN, 0); // ปลุกเมื่อ GPIO4 = 0 (LOW)
   Serial.println(WAKE_PIN);
 
-  client.setServer(mqtt_server, port);
-  client.setCallback(callback);
-  client.loop();
-
-  reconnect();
-
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   Serial.print("Wakeup reason: ");
   switch (wakeup_reason) {
@@ -144,19 +153,49 @@ void setup() {
     case ESP_SLEEP_WAKEUP_UNDEFINED : Serial.println("Undefined"); break;
     default : Serial.println("Other"); break;
   }
+
+  client.setServer(mqtt_server, port);
+  client.setCallback(callback);
+
+  if (!client.connected()) {
+    reconnect();
+    Serial.println("MQTT not connected, reconnecting...");
+  } else {
+    client.loop();
+    Serial.println("MQTT connected");
+  }
   
   if (soilValue > dryThreshold) {
     digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
-    sendCommand();
     Serial.println("Pump ON (IMMEDIATELY SOIL DRY > 3500)");
-    delay(5000);  // เปิดปั๊ม 1 ชั่วโมง
-    digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊ม
+
+    unsigned long pumpStart = millis();         // จับเวลาตอนเปิดปั๊ม
+    unsigned long pumpDuration = 10000;         // ตั้งเวลาให้ปั๊มทำงาน 10 วินาที
+
+    while (millis() - pumpStart < pumpDuration) {
+      client.loop();  // ให้รับ RPC ได้ตลอดระยะที่ปั๊มทำงาน
+
+      // ตรวจสอบการเชื่อมต่อ MQTT
+      if (!client.connected()) {
+        reconnect();
+      }
+
+      // ตรวจสอบว่ามีการสั่งปิดผ่าน RPC หรือไม่
+      if (digitalRead(PUMP_PIN) == LOW) {
+        Serial.println("Pump forced OFF via RPC");
+        break;
+      }
+
+      delay(10); // ลดภาระ CPU
+    }
+
+    digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊มเมื่อครบเวลา หรือถูกสั่งหยุด
     Serial.println("Pump OFF");
     alreadySendLoRa = false;
 
     delay(5000);
   } else {
-    digitalWrite(PUMP_PIN, LOW); 
+    digitalWrite(PUMP_PIN, LOW);
   }
 
   int firstColon = currentTime.indexOf(':');
@@ -168,11 +207,13 @@ void setup() {
   // เช็คว่าเวลาตรงกับ 8:00 AM หรือ 5:00 PM
   if (currentTime.startsWith("08") || currentTime.startsWith("17"))  {
     if(minute >= 0 && minute <= 30){ // เช็คเวลาหลักนาที 8:00 - 8:30 || 17:00 - 17:30
-      digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
-      Serial.println("Pump ON at the scheduled time");
-      delay(5000);  // เปิดปั๊ม 1 ชั่วโมง
-      digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊ม
-      Serial.println("Pump OFF");
+      if (soilValue > dryThreshold){
+        digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
+        Serial.println("Pump ON at the scheduled time");
+        delay(5000);  // เปิดปั๊ม 1 ชั่วโมง
+        digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊ม
+        Serial.println("Pump OFF");
+      }
     }
   }
 
@@ -188,7 +229,7 @@ void setup() {
   Serial.flush(); 
   Serial.println("Entering Deep Sleep...");
 
-  delay(100);
+  delay(10000);
   // เข้าสู่โหมด deep sleep
   esp_deep_sleep_start();
 }

@@ -39,15 +39,15 @@ int pHValue= 0;
 float temp = 0;
 const int dryThreshold = 3500;
 
-String commandON = "ON";
-String commandOFF = "OFF";
+int commandON = 1;
+int commandOFF = 0;
 
 void sendCommand() {
-  String commandToSend;
+  int commandToSend;
 
   if (digitalRead(PUMP_PIN) == HIGH) {
     commandToSend = commandON;
-  } else {
+  } else if(digitalRead(PUMP_PIN) == LOW) {
     commandToSend = commandOFF;
   }
 
@@ -193,7 +193,7 @@ void setup() {
     Serial.println("Pump OFF");
     alreadySendLoRa = false;
 
-    delay(5000);
+    delay(2000);
   } else {
     digitalWrite(PUMP_PIN, LOW);
   }
@@ -208,13 +208,40 @@ void setup() {
   if (currentTime.startsWith("08") || currentTime.startsWith("17"))  {
     if(minute >= 0 && minute <= 30){ // เช็คเวลาหลักนาที 8:00 - 8:30 || 17:00 - 17:30
       if (soilValue > dryThreshold){
-        digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
-        Serial.println("Pump ON at the scheduled time");
-        delay(5000);  // เปิดปั๊ม 1 ชั่วโมง
-        digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊ม
-        Serial.println("Pump OFF");
+            digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
+            Serial.println("Pump ON (IMMEDIATELY SOIL DRY > 3500)");
+
+            unsigned long pumpStart = millis();         // จับเวลาตอนเปิดปั๊ม
+            unsigned long pumpDuration = 10000;         // ตั้งเวลาให้ปั๊มทำงาน 10 วินาที
+
+            while (millis() - pumpStart < pumpDuration) {
+              client.loop();  // ให้รับ RPC ได้ตลอดระยะที่ปั๊มทำงาน
+
+              // ตรวจสอบการเชื่อมต่อ MQTT
+              if (!client.connected()) {
+                reconnect();
+              }
+
+              // ตรวจสอบว่ามีการสั่งปิดผ่าน RPC หรือไม่
+              if (digitalRead(PUMP_PIN) == LOW) {
+                Serial.println("Pump forced OFF via RPC");
+                break;
+              }
+
+              delay(10); // ลดภาระ CPU
+            }
+
+            digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊มเมื่อครบเวลา หรือถูกสั่งหยุด
+            Serial.println("Pump OFF");
+            alreadySendLoRa = false;
+
+            delay(2000);
+      } else {
+            digitalWrite(PUMP_PIN, LOW);  
       }
     }
+  } else {
+    digitalWrite(PUMP_PIN, LOW);  
   }
 
   int soil_percent = map(soilValue, 0, 4095, 100, 1);

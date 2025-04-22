@@ -64,6 +64,7 @@ void sendCommand() {
     alreadySendLoRa = true;
   }
 }
+
 void reconnect() {
   while (!client.connected()) {
     if (client.connect(ID, token, "")) {
@@ -191,7 +192,6 @@ void setup() {
 
     digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊มเมื่อครบเวลา หรือถูกสั่งหยุด
     Serial.println("Pump OFF");
-    alreadySendLoRa = false;
 
     delay(2000);
   } else {
@@ -233,7 +233,6 @@ void setup() {
 
             digitalWrite(PUMP_PIN, LOW);   // ปิดปั๊มเมื่อครบเวลา หรือถูกสั่งหยุด
             Serial.println("Pump OFF");
-            alreadySendLoRa = false;
 
             delay(2000);
       } else {

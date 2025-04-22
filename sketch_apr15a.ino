@@ -8,12 +8,15 @@
 #define SOIL_SENSOR_PIN 25
 
 int soilValue = 0;
+const int dryThreshold = 3500;
 
 void setup() {
   Serial.begin(115200);
   pinMode(PUMP_PIN, OUTPUT);
   pinMode(SOIL_SENSOR_PIN, INPUT);
   digitalWrite(PUMP_PIN, LOW);
+
+  esp_sleep_enable_ext0_wakeup(WAKE_PIN, 0);  // รอ LoRa ปลุกผ่าน DIO0
 
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   Serial.print("Wakeup reason: ");
@@ -33,48 +36,57 @@ void setup() {
     while (true);
   }
 
-  LoRa.receive();
+  //LoRa.receive();
   Serial.println("Waiting for LoRa packet...");
 
-  unsigned long pumpStart = millis();         // จับเวลาตอนเปิดปั๊ม
-  unsigned long pumpDuration = 10000;   
+  int packetSize = LoRa.parsePacket();
+  if (packetSize) {
+    String msg = "";
+    while (LoRa.available()) {
+      msg += (char)LoRa.read();
+    }
 
-  while (millis() - pumpStart < pumpDuration) {  // รอ packet 3 วินาที
-    int packetSize = LoRa.parsePacket();
-    if (packetSize) {
-      String msg = "";
-      while (LoRa.available()) {
-        msg += (char)LoRa.read();
-      }
+    Serial.println("Received: " + msg);
 
-      Serial.println("Received: " + msg);
+    if (msg == "ON") {
+        if (soilValue > dryThreshold) {
+          digitalWrite(PUMP_PIN, HIGH);  // เปิดปั๊ม
+          Serial.println("Pump ON FOLLOW OPEN BY MASTER");
 
-      if (msg == "ON") {
-        if (soilValue > 3500) {
-          digitalWrite(PUMP_PIN, HIGH);
-          Serial.println("PUMP ON LoRa");
-          delay(5000);  // หรือเปลี่ยนตามต้องการ
-          digitalWrite(PUMP_PIN, LOW);
+          unsigned long pumpStart = millis();         // จับเวลาตอนเปิดปั๊ม
+          unsigned long pumpDuration = 10000;         // ตั้งเวลาให้ปั๊มทำงาน 10 วินาที
+
+          while (millis() - pumpStart < pumpDuration) {
+            // ตรวจสอบว่ามีการสั่งปิดผ่าน RPC หรือไม่
+            if (digitalRead(PUMP_PIN) == LOW) {
+              Serial.println("Pump forced OFF via RPC");
+              break;
+            }
+
+            delay(10);
+          }
+
+          digitalWrite(PUMP_PIN, LOW);  
+          Serial.println("Pump OFF");
+
+          delay(2000);
         } else {
           digitalWrite(PUMP_PIN, LOW);
-          Serial.println("PUMP OFF, DENIED MASTER");
         }
-      } else if (msg == "OFF") {
-        digitalWrite(PUMP_PIN, LOW);
-        Serial.println("PUMP OFF, FORCE FROM MASTER");
-      }
-
-      if (digitalRead(PUMP_PIN) == LOW) {
-        Serial.println("Pump forced OFF via RPC");
-        break;
-      }
     }
-  }
 
-  esp_sleep_enable_ext0_wakeup(WAKE_PIN, 0);  // รอ LoRa ปลุกผ่าน DIO0
-  Serial.println("Going to sleep...");
-  delay(100);
+  // ตั้งเวลาให้ ESP32 ตื่นทุกๆ 1 ชั่วโมง (3600 วินาที)
+  Serial.println("Wake up...");
+  //esp_sleep_enable_timer_wakeup(3600 * 1000000);
+  esp_sleep_enable_timer_wakeup(36 * 1000000);
+  
+  Serial.flush(); 
+  Serial.println("Entering Deep Sleep...");
+
+  delay(10000);
+  // เข้าสู่โหมด deep sleep
   esp_deep_sleep_start();
+  }
 }
 
 void loop() {
